@@ -1,0 +1,234 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Smile, AlertTriangle, Info } from 'lucide-react';
+
+const benefitDetails = {
+  electronic: { percent: 50, period: 6, eligibility: 12, maxPercent: 10, coolingPeriod: 6 },
+  "regular-2wheeler": { percent: 50, period: 12, eligibility: 18, maxPercent: 15, coolingPeriod: 18 },
+  "electric-2wheeler": { percent: 50, period: 12, eligibility: 18, maxPercent: 20, coolingPeriod: 18 },
+  "regular-4wheeler": { percent: 50, period: 24, eligibility: 36, maxPercent: 20, coolingPeriod: 24 },
+  "electric-4wheeler": { percent: 50, period: 24, eligibility: 36, maxPercent: 25, coolingPeriod: 24 }
+};
+
+const salaryCaps = {
+  electronic: 500000, "regular-2wheeler": 500000, "electric-2wheeler": 500000,
+  "regular-4wheeler": 1000000, "electric-4wheeler": 1000000
+};
+
+const banters = {
+  discount: "Your cashback or discounts exceed the item cost. Now you'll be paying the company!\n<span class='text-xs'>Just kidding, but please check your input.</span>"
+};
+
+const EmployeeBenefitCalculator = () => {
+  const [state, setState] = useState({
+    employmentType: 'joining-date', joiningDate: '', monthsOfService: '', facilityType: '',
+    previouslyAvailed: 'no', previousAvailmentDate: '', grossMonthlySalary: '', itemCost: '',
+    discounts: '', result: null
+  });
+
+  const updateState = (key, value) => setState(prev => ({ ...prev, [key]: value }));
+
+  const calculateServiceDuration = () => {
+    const { employmentType, joiningDate, monthsOfService } = state;
+    return employmentType === 'joining-date' && joiningDate
+      ? Math.ceil(Math.abs(new Date() - new Date(joiningDate)) / (1000 * 60 * 60 * 24 * 30.44))
+      : parseInt(monthsOfService, 10) || 0;
+  };
+
+  const calculateBenefit = () => {
+    const { facilityType, previouslyAvailed, previousAvailmentDate, grossMonthlySalary, itemCost, discounts } = state;
+    const serviceDuration = calculateServiceDuration();
+    const details = benefitDetails[facilityType];
+    
+    if (!details) return;
+
+    const isEligible = serviceDuration >= details.eligibility;
+    let coolingPeriod = false;
+    let nextEligibleDate = null;
+
+    if (previouslyAvailed === 'yes' && previousAvailmentDate) {
+      const lastAvailmentDate = new Date(previousAvailmentDate);
+      const today = new Date();
+      const monthsSinceLastAvailment = (today.getFullYear() - lastAvailmentDate.getFullYear()) * 12 + 
+                                       (today.getMonth() - lastAvailmentDate.getMonth());
+      
+      if (monthsSinceLastAvailment < details.coolingPeriod) {
+        coolingPeriod = true;
+        nextEligibleDate = new Date(lastAvailmentDate.setMonth(lastAvailmentDate.getMonth() + details.coolingPeriod));
+      }
+    }
+
+    const maxEligibleAmount = (parseFloat(grossMonthlySalary) * details.maxPercent / 100) * details.period;
+    const itemNetCost = parseFloat(itemCost) - parseFloat(discounts || 0);
+    const maxBenefitAmount = Math.min(maxEligibleAmount, itemNetCost * details.percent / 100);
+    const monthlyBenefitAmount = maxBenefitAmount / details.period;
+
+    const discountBanter = parseFloat(discounts) > parseFloat(itemCost) ? banters.discount : null;
+
+    setState(prev => ({
+      ...prev,
+      result: {
+        isEligible: isEligible && !coolingPeriod,
+        nextEligibleDate: nextEligibleDate ? nextEligibleDate.toLocaleDateString() : null,
+        maxBenefitAmount, monthlyBenefitAmount, disbursementPeriod: details.period,
+        maxEligibleAmount, maxPercentage: details.maxPercent, facilityType, serviceDuration,
+        totalItemCost: itemNetCost, coolingPeriod, eligibilityMonths: details.eligibility,
+        discountBanter
+      }
+    }));
+  };
+
+  useEffect(() => {
+    const { employmentType, joiningDate, monthsOfService, facilityType } = state;
+    if (employmentType && (joiningDate || monthsOfService) && facilityType) {
+      calculateBenefit();
+    }
+  }, [state.employmentType, state.joiningDate, state.monthsOfService, state.facilityType, state.previouslyAvailed, state.previousAvailmentDate, state.grossMonthlySalary, state.itemCost, state.discounts]);
+
+  const renderFormField = (label, id, type, value, onChange, options = null) => (
+    <div className="mb-2">
+      <Label htmlFor={id} className="text-sm">{label}</Label>
+      {options ? (
+        <Select value={value} onValueChange={(val) => onChange(id, val)}>
+          <SelectTrigger>
+            <SelectValue placeholder={`Select ${label.toLowerCase()}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Input type={type} id={id} value={value} onChange={(e) => onChange(id, e.target.value)} />
+      )}
+    </div>
+  );
+
+  const renderResult = () => {
+    const { result } = state;
+    if (!result) {
+      return (
+        <div className="space-y-2 text-sm">
+          <Alert variant="info" className="bg-blue-50 border-blue-200 text-blue-800 p-2">
+            <Info className="h-4 w-4 mr-2 inline-block" />
+            <AlertDescription>
+              <p className="font-semibold">Welcome to the Employee Benefit Calculator!</p>
+              <p>Fill out the form to see your potential benefits.</p>
+            </AlertDescription>
+          </Alert>
+          <Alert variant="warning" className="bg-yellow-50 border-yellow-200 text-yellow-800 p-2 mt-2">
+            <AlertDescription>
+              <p className="text-xs">
+                <strong>Disclaimer:</strong> This calculator provides estimates based on general guidelines. 
+                Actual benefits may vary. The company reserves the right to make the final determination 
+                on all benefit-related matters.
+              </p>
+            </AlertDescription>
+          </Alert>
+        </div>
+      );
+    }
+
+    const { isEligible, nextEligibleDate, maxBenefitAmount, monthlyBenefitAmount, disbursementPeriod, maxEligibleAmount, maxPercentage, facilityType, serviceDuration, coolingPeriod, eligibilityMonths, discountBanter } = result;
+
+    const formatValue = (value) => isNaN(value) ? 'NA' : `₹${Math.round(value)}`;
+
+    return (
+      <div className="space-y-2 text-sm">
+        {discountBanter && (
+          <Alert variant="warning" className="bg-yellow-100 border-yellow-400 text-yellow-800 p-2 mb-4">
+            <AlertTriangle className="h-4 w-4 mr-2 inline-block" />
+            <AlertDescription className="font-semibold" dangerouslySetInnerHTML={{__html: discountBanter}} />
+          </Alert>
+        )}
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold">Eligibility Status</h4>
+          <Badge className={isEligible ? "bg-green-600" : "bg-red-500"}>{isEligible ? 'Eligible' : 'Not Eligible'}</Badge>
+        </div>
+        {!isEligible && (
+          <Alert variant="destructive" className="text-xs p-2">
+            <AlertDescription>
+              {coolingPeriod
+                ? `You're not eligible until ${nextEligibleDate}. This is due to the cooling period after your last benefit availed.`
+                : `You need at least ${eligibilityMonths} months of service to be eligible for this benefit. Your current service duration is ${serviceDuration} months.`}
+            </AlertDescription>
+          </Alert>
+        )}
+        {isEligible && (
+          <>
+            <div className="bg-blue-50 p-2 rounded-md">
+              <h5 className="font-semibold text-blue-700">Your Benefit Amount</h5>
+              <p className="text-xl font-bold text-blue-800">{formatValue(maxBenefitAmount)}</p>
+              <p className="text-xs text-blue-600">Monthly: {formatValue(monthlyBenefitAmount)} for {disbursementPeriod} months</p>
+            </div>
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              <div><p className="font-semibold">Facility Type</p><p>{facilityType.replace('-', ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p></div>
+              <div><p className="font-semibold">Service Duration</p><p>{serviceDuration} months</p></div>
+              <div><p className="font-semibold">Benefit Structure</p><p>Lesser of {maxPercentage}% of salary or 50% of item cost for {disbursementPeriod} months</p></div>
+              <div><p className="font-semibold">Max Eligible Amount</p><p>{formatValue(maxEligibleAmount)}</p></div>
+            </div>
+            <Alert variant="info" className="bg-yellow-50 border-yellow-200 text-xs p-2">
+              <AlertDescription>
+                <p className="font-semibold">Tax Implications:</p>
+                <p className="text-xs leading-tight">This benefit may be taxable. Please consult with a tax professional for personalized advice.</p>
+              </AlertDescription>
+            </Alert>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card className="shadow-lg">
+      <CardHeader style={{backgroundColor: "#77A666"}} className="text-white py-2">
+        <CardTitle className="text-xl font-bold">Employee Benefit Calculator</CardTitle>
+        <p className="text-xs mt-1">Infinite Environmental Solutions Limited</p>
+      </CardHeader>
+      <CardContent className="mt-2">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <form className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {renderFormField("Employment Duration", "employmentType", "select", state.employmentType, updateState, [
+                  { value: "joining-date", label: "Joining Date" },
+                  { value: "months-of-service", label: "Months of Service" }
+                ])}
+                {state.employmentType === 'joining-date'
+                  ? renderFormField("Joining Date", "joiningDate", "date", state.joiningDate, updateState)
+                  : renderFormField("Months of Service", "monthsOfService", "number", state.monthsOfService, updateState)}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {renderFormField("Facility Type", "facilityType", "select", state.facilityType, updateState, [
+                  { value: "electronic", label: "Electronic" },
+                  { value: "regular-2wheeler", label: "Regular 2 Wheeler" },
+                  { value: "electric-2wheeler", label: "Electric 2 Wheeler" },
+                  { value: "regular-4wheeler", label: "Regular 4 Wheeler" },
+                  { value: "electric-4wheeler", label: "Electric 4 Wheeler" }
+                ])}
+                {renderFormField("Previously Availed", "previouslyAvailed", "select", state.previouslyAvailed, updateState, [
+                  { value: "yes", label: "Yes" },
+                  { value: "no", label: "No" }
+                ])}
+              </div>
+              {state.previouslyAvailed === 'yes' && renderFormField("Last Payment Date", "previousAvailmentDate", "date", state.previousAvailmentDate, updateState)}
+              {renderFormField("Gross Monthly Salary", "grossMonthlySalary", "number", state.grossMonthlySalary, updateState)}
+              {renderFormField("Item Cost", "itemCost", "number", state.itemCost, updateState)}
+              {renderFormField("Discounts/Cashbacks", "discounts", "number", state.discounts, updateState)}
+              {state.facilityType.includes('electric') && (
+                <p className="text-xs text-green-600 mt-1"><Smile className="inline mr-1 h-4 w-4" /> Great choice! You're contributing to a sustainable future.</p>
+              )}
+            </form>
+          </div>
+          <div>{renderResult()}</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default EmployeeBenefitCalculator;
